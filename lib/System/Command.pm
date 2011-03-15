@@ -12,7 +12,32 @@ use List::Util qw( reduce );
 
 use System::Command::Reaper;
 
-our $VERSION = '1.01';
+use POSIX ":sys_wait_h";
+use constant STATUS  => qw( exit signal core );
+
+our $VERSION = '1.02';
+
+# Trap the real STDIN/ERR/OUT file handles in case someone
+# *COUGH* Catalyst *COUGH* screws with them which breaks open3
+my ($REAL_STDIN, $REAL_STDOUT, $REAL_STDERR);
+BEGIN {
+    open $REAL_STDIN, "<&=".fileno(*STDIN);
+    open $REAL_STDOUT, ">>&=".fileno(*STDOUT);
+    open $REAL_STDERR, ">>&=".fileno(*STDERR);
+}
+
+our $QUIET = 0;
+
+sub import {
+    my ( $class, @args ) = @_;
+    my %arg = ( quiet => sub { $QUIET = 1 } );
+    for my $arg (@args) {
+        $arg =~ s/^-//;    # allow dashed options
+        croak "Unknown option '$arg' in 'use System::Command'"
+            if !exists $arg{$arg};
+        $arg{$arg}->();
+    }
+}
 
 # a few simple accessors
 for my $attr (qw( pid stdin stdout stderr exit signal core options )) {
@@ -24,6 +49,33 @@ for my $attr (qw( cmdline )) {
     *$attr = sub { return @{ $_[0]{$attr} } };
 }
 
+# a private sub-process spawning function
+my $_seq   = 0;
+my $_spawn = sub {
+    my (@cmd) = @_;
+    my ( $pid, $in, $out, $err );
+
+    # save standard handles
+    local *STDIN  = $REAL_STDIN;
+    local *STDOUT = $REAL_STDOUT;
+    local *STDERR = $REAL_STDERR;
+
+    # setup filehandles
+    {
+        no strict 'refs';
+        $in  = \do { local *{"IN$_seq"} };
+        $out = \do { local *{"OUT$_seq"} };
+        $err = \do { local *{"ERR$_seq"} };
+        $_seq++;
+    }
+
+    # start the command
+    $pid = eval { open3( $in, $out, $err, @cmd ); };
+
+    return ( $pid, $in, $out, $err );
+};
+
+# module methods
 sub new {
     my ( $class, @cmd ) = @_;
 
@@ -56,11 +108,9 @@ sub new {
         if exists $o->{env};
 
     # start the command
-    my ( $in, $out, $err );
-    $err = Symbol::gensym;
-    my $pid = eval { open3( $in, $out, $err, @cmd ); };
+    my ( $pid, $in, $out, $err ) = eval { $_spawn->(@cmd); };
 
-    # FIXME - better check open3 error conditions
+    # FIXME - better check error conditions
     croak $@ if !defined $pid;
 
     # some input was provided
@@ -98,6 +148,30 @@ sub spawn {
     return @{ System::Command->new(@cmd) }{qw( pid stdin stdout stderr )};
 }
 
+sub is_terminated {
+    my ($self) = @_;
+    my $pid = $self->{pid};
+
+    # Zed's dead, baby. Zed's dead.
+    return $pid if !kill 0, $pid and exists $self->{exit};
+
+    # If that is a re-animated body, we're gonna have to kill it.
+    if ( my $reaped = waitpid( $pid, WNOHANG ) ) {
+        my $zed = $reaped == $pid;
+        carp "Child process already reaped, check for a SIGCHLD handler"
+            if !$zed && !$QUIET;
+
+        @{$self}{ STATUS() } = @{ $self->{reaper} }{ STATUS() }
+            = $zed
+            ? ( $? >> 8, $? & 127, $? & 128 )
+            : ( -1, -1, -1 );
+
+        return $reaped;    # It's dead, Jim!
+    }
+
+    # Look! It's moving. It's alive. It's alive...
+    return;
+}
 
 # delegate close() to the reaper
 sub close { $_[0]{reaper}->reap() }
@@ -125,6 +199,12 @@ System::Command - Object for running system commands
     $cmd->stdout();    # filehandle to the process' stdout (read)
     $cmd->stderr();    # filehandle to the process' stdout (read)
     $cmd->pid();       # pid of the child process
+
+    # find out if the child process died
+    if ( $cmd->is_terminated() ) {
+        # the handles are not closed yet
+        # but $cmd->exit() et al. are available
+    }
 
     # done!
     $cmd->close();
@@ -195,6 +275,15 @@ Close all pipes to the child process, collects exit status, etc.
 and defines a number of attributes (see below).
 
 
+=head2 is_terminated()
+
+Returns a true value if the underlying process was terminated.
+
+If the process was indeed terminated, collects exit status, etc.
+and defines the same attributes as C<close()>, but does B<not> close
+all pipes to the child process,
+
+
 =head2 spawn( @cmd )
 
 This shortcut method calls C<new()> (and so accepts options in the same
@@ -246,7 +335,8 @@ while the anonymous C<System::Command> object has been destroyed. Once
 C<$fh> is destroyed, the subprocess will be reaped, thus avoiding zombies.
 
 
-After the call to C<close()>, the following attributes will be defined:
+After the call to C<close()> or after C<is_terminated()> returns true,
+the following attributes will be defined:
 
 =over 4
 
@@ -263,6 +353,38 @@ A boolean value indicating if the command dumped core.
 The signal, if any, that killed the command.
 
 =back
+
+=head1 CAVEAT EMPTOR
+
+Note that C<System::Command> uses C<waitpid()> to catch the status
+information of the child processes it starts. This means that if your
+code (or any module you C<use>) does something like the following:
+
+    local $SIG{CHLD} = 'IGNORE';    # reap child processes
+
+C<System::Command> will not be able to capture the C<exit>, C<core>
+and C<signal> attributes. It will instead set all of them to the
+impossible value C<-1>, and display the warning
+C<Child process already reaped, check for a SIGCHLD handler>.
+
+To silence this warning (and accept the impossible status information),
+load C<System::Command> with:
+
+    use System::Command -quiet;
+
+It is also possible to more finely control the warning by setting
+the C<$System::Command::QUIET> variable (the warning is not emitted
+if the variable is set to a true value).
+
+If the subprocess started by C<System::Command> has a short life
+expectancy, and no other child process is expected to die during that
+time, you could even disable the handler locally (use at your own risks):
+
+    {
+        local $SIG{CHLD};
+        my $cmd = System::Command->new(@cmd);
+        ...
+    }
 
 =head1 AUTHOR
 
@@ -318,7 +440,7 @@ L<http://search.cpan.org/dist/System-Command/>
 
 =head1 COPYRIGHT
 
-Copyright 2010 Philippe Bruhat (BooK).
+Copyright 2010-2011 Philippe Bruhat (BooK).
 
 =head1 LICENSE
 

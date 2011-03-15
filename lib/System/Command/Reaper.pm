@@ -10,7 +10,7 @@ use Scalar::Util qw( weaken );
 use constant HANDLES => qw( stdin stdout stderr );
 use constant STATUS  => qw( exit signal core );
 
-our $VERSION = '1.00';
+our $VERSION = '1.01';
 
 sub new {
     my ($class, $command) = @_;
@@ -32,15 +32,22 @@ sub reap {
     $out and $out->opened and $out->close || carp "error closing stdout: $!";
     $err and $err->opened and $err->close || carp "error closing stderr: $!";
 
-    # and wait for the child
-    waitpid $self->{pid}, 0;
+    # and wait for the child (if any)
+    if ( my $reaped = waitpid( $self->{pid}, 0 ) and !exists $self->{exit} ) {
+        my $zed = $reaped == $self->{pid};
+        carp "Child process already reaped, check for a SIGCHLD handler"
+            if !$zed && !$System::Command::QUIET;
 
-    # check $?
-    @{$self}{ STATUS() } = ( $? >> 8, $? & 127, $? & 128 );
+        # check $?
+        @{$self}{ STATUS() }
+            = $zed
+            ? ( $? >> 8, $? & 127, $? & 128 )
+            : ( -1, -1, -1 );
 
-    # does our creator still exist?
-    @{ $self->{command} }{ STATUS() } = @{$self}{ STATUS() }
-        if defined $self->{command};
+        # does our creator still exist?
+        @{ $self->{command} }{ STATUS() } = @{$self}{ STATUS() }
+            if defined $self->{command};
+    }
 
     return $self;
 }
@@ -128,7 +135,7 @@ reaping) with code examples, which I then adapted to my needs.
 
 =head1 COPYRIGHT
 
-Copyright 2010 Philippe Bruhat (BooK), all rights reserved.
+Copyright 2010-2011 Philippe Bruhat (BooK), all rights reserved.
 
 =head1 LICENSE
 
