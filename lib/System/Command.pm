@@ -13,7 +13,7 @@ use List::Util qw( reduce );
 use POSIX ":sys_wait_h";
 use constant STATUS  => qw( exit signal core );
 
-our $VERSION = '1.03';
+our $VERSION = '1.04';
 
 # Trap the real STDIN/ERR/OUT file handles in case someone
 # *COUGH* Catalyst *COUGH* screws with them which breaks open3
@@ -102,8 +102,11 @@ sub new {
     local %ENV = %ENV;
 
     # update the environment
-    @ENV{ keys %{ $o->{env} } } = values %{ $o->{env} }
-        if exists $o->{env};
+    if ( exists $o->{env} ) {
+        @ENV{ keys %{ $o->{env} } } = values %{ $o->{env} };
+        delete $ENV{$_}
+            for grep { !defined $o->{env}{$_} } keys %{ $o->{env} };
+    }
 
     # start the command
     my ( $pid, $in, $out, $err ) = eval { $_spawn->(@cmd); };
@@ -257,6 +260,9 @@ The I<current working directory> in which the command will be run.
 =item C<env>
 
 A hashref containing key / values to add to the command environment.
+
+If a value is C<undef>, the variable corresponding to the key will
+be I<removed> from the environment.
 
 =item C<input>
 
