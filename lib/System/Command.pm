@@ -13,7 +13,7 @@ use List::Util qw( reduce );
 use POSIX ":sys_wait_h";
 use constant STATUS  => qw( exit signal core );
 
-our $VERSION = '1.04';
+our $VERSION = '1.05';
 
 # Trap the real STDIN/ERR/OUT file handles in case someone
 # *COUGH* Catalyst *COUGH* screws with them which breaks open3
@@ -142,7 +142,7 @@ sub new {
 
 sub spawn {
     my ( $class, @cmd ) = @_;
-    return @{ System::Command->new(@cmd) }{qw( pid stdin stdout stderr )};
+    return @{ $class->new(@cmd) }{qw( pid stdin stdout stderr )};
 }
 
 sub is_terminated {
