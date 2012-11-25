@@ -10,10 +10,11 @@ use IO::Handle;
 use IPC::Open3 qw( open3 );
 use List::Util qw( reduce );
 
+use Config;
 use POSIX ":sys_wait_h";
 use constant STATUS  => qw( exit signal core );
 
-our $VERSION = '1.07';
+our $VERSION = '1.08';
 
 our $QUIET = 0;
 
@@ -54,7 +55,7 @@ my $_spawn = sub {
     }
 
     # start the command
-    $pid = eval { open3( $in, $out, $err, @cmd ); };
+    $pid = open3( $in, $out, $err, @cmd );
 
     return ( $pid, $in, $out, $err );
 };
@@ -103,7 +104,8 @@ sub new {
     # some input was provided
     if ( defined $o->{input} ) {
         local $SIG{PIPE}
-            = sub { croak "Broken pipe when writing to: @cmd" };
+            = sub { croak "Broken pipe when writing to: @cmd" }
+            if $Config{sig_name} =~ /\bPIPE\b/;
         print {$in} $o->{input} if length $o->{input};
         $in->close;
     }
@@ -235,6 +237,13 @@ Runs an external command using the list in C<@cmd>.
 
 If C<@cmd> contains a hash reference, it is taken as an I<option> hash.
 
+If several option hashes are passed to C<new()>, they will be merged
+together with individual values being overridden by those (with the same
+key) from hashes that appear later in the list.
+
+To allow subclasses to support their own set of options, unrecognized
+options are silently ignored.
+
 The recognized keys are:
 
 =over 4
@@ -265,10 +274,6 @@ which will cause a SIGPIPE when trying to write to it. This will raise
 an exception.
 
 =back
-
-If several option hashes are passed to C<new()>, they will be merged
-together with individual values being overridden by those (with the same
-key) from hashes that appear later in the list.
 
 The C<System::Command> object returned by C<new()> has a number of
 attributes defined (see below).
