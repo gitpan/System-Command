@@ -13,6 +13,19 @@ WriteMakefile(
     PL_FILES            => {},
     PREREQ_PM => {
         'Test::More' => 0,
+        'IPC::Open3' => 0,
+        'Carp'       => 0,
+        'Cwd'        => 0,
+        'IO::Handle' => 0,
+        'List::Util' => 0,
+        'Config'     => 0,
+        'POSIX'      => 0,
+        'Symbol'     => 0,
+    },
+    META_MERGE => {
+        resources => {
+            repository => 'http://github.com/book/System-Command',
+        },
     },
     dist                => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
     clean               => { FILES => 'System-Command-*' },

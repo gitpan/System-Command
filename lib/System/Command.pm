@@ -8,13 +8,14 @@ use Carp;
 use Cwd qw( cwd );
 use IO::Handle;
 use IPC::Open3 qw( open3 );
+use Symbol ();
 use List::Util qw( reduce );
 
 use Config;
 use POSIX ":sys_wait_h";
 use constant STATUS  => qw( exit signal core );
 
-our $VERSION = '1.08';
+our $VERSION = '1.09';
 
 our $QUIET = 0;
 
@@ -43,16 +44,11 @@ for my $attr (qw( cmdline )) {
 my $_seq   = 0;
 my $_spawn = sub {
     my (@cmd) = @_;
-    my ( $pid, $in, $out, $err );
-
+    my $pid;
     # setup filehandles
-    {
-        no strict 'refs';
-        $in  = \do { local *{"IN$_seq"} };
-        $out = \do { local *{"OUT$_seq"} };
-        $err = \do { local *{"ERR$_seq"} };
-        $_seq++;
-    }
+    my $in  = Symbol::gensym;
+    my $out = Symbol::gensym;
+    my $err = Symbol::gensym;
 
     # start the command
     $pid = open3( $in, $out, $err, @cmd );
