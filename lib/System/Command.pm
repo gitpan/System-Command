@@ -15,7 +15,11 @@ use Config;
 use POSIX ":sys_wait_h";
 use constant STATUS  => qw( exit signal core );
 
-our $VERSION = '1.09';
+# MSWin32 support
+use constant MSWin32 => $^O eq 'MSWin32';
+require IPC::Run if MSWin32;
+
+our $VERSION = '1.100';
 
 our $QUIET = 0;
 
@@ -40,21 +44,37 @@ for my $attr (qw( cmdline )) {
     *$attr = sub { return @{ $_[0]{$attr} } };
 }
 
-# a private sub-process spawning function
-my $_seq   = 0;
+# REALLY PRIVATE FUNCTIONS
+# a sub-process spawning function
 my $_spawn = sub {
     my (@cmd) = @_;
     my $pid;
+
     # setup filehandles
     my $in  = Symbol::gensym;
     my $out = Symbol::gensym;
     my $err = Symbol::gensym;
 
     # start the command
-    $pid = open3( $in, $out, $err, @cmd );
+    if (MSWin32) {
+        $pid = IPC::Run::start(
+            [@cmd],
+            '<pipe'  => $in,
+            '>pipe'  => $out,
+            '2>pipe' => $err,
+        );
+    }
+    else {
+        $pid = eval { open3( $in, $out, $err, @cmd ); };
+    }
 
     return ( $pid, $in, $out, $err );
 };
+
+# this is necessary, because kill(0,pid) is misimplemented in perl core
+my $_is_alive = MSWin32
+    ? sub { return `tasklist /FO CSV /NH /fi "PID eq $_[0]"` =~ /^"/ }
+    : sub { return kill 0, $_[0]; };
 
 # module methods
 sub new {
@@ -113,12 +133,13 @@ sub new {
 
     # create the object
     my $self = bless {
-        cmdline => [ @cmd ],
-        options => $o,
-        pid     => $pid,
-        stdin   => $in,
-        stdout  => $out,
-        stderr  => $err,
+        cmdline  => [@cmd],
+        options  => $o,
+        pid      => MSWin32 ? $pid->{KIDS}[0]{PID} : $pid,
+        stdin    => $in,
+        stdout   => $out,
+        stderr   => $err,
+        _ipc_run => $pid,
     }, $class;
 
     return $self;
@@ -134,7 +155,7 @@ sub is_terminated {
     my $pid = $self->{pid};
 
     # Zed's dead, baby. Zed's dead.
-    return $pid if !kill 0, $pid and exists $self->{exit};
+    return $pid if !$_is_alive->($pid) and exists $self->{exit};
 
     # If that is a re-animated body, we're gonna have to kill it.
     return $self->_reap(WNOHANG);
@@ -397,12 +418,14 @@ Philippe Bruhat (BooK), C<< <book at cpan.org> >>
 
 =head1 ACKNOWLEDGEMENTS
 
-Thanks to Alexis Sukrieh who, when he saw the description of
+Thanks to Alexis Sukrieh (SUKRIA) who, when he saw the description of
 C<Git::Repository::Command> during my talk at OSDC.fr 2010, asked
 why it was not an independent module. This module was started by
 taking out of C<Git::Repository::Command> 1.08 the parts that
 weren't related to Git.
 
+Thanks to Christian Walde (MITHALDU) for his help in making this
+module work better under Win32.
 
 =head1 BUGS
 
@@ -442,7 +465,7 @@ L<http://search.cpan.org/dist/System-Command/>
 
 =head1 COPYRIGHT
 
-Copyright 2010-2011 Philippe Bruhat (BooK).
+Copyright 2010-2013 Philippe Bruhat (BooK).
 
 =head1 LICENSE
 
@@ -450,8 +473,7 @@ This program is free software; you can redistribute it and/or modify it
 under the terms of either: the GNU General Public License as published
 by the Free Software Foundation; or the Artistic License.
 
-See http://dev.perl.org/licenses/ for more information.
-
+See L<http://dev.perl.org/licenses/> for more information.
 
 =cut
 

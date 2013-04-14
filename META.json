@@ -4,7 +4,7 @@
       "Philippe Bruhat (BooK) <book@cpan.org>"
    ],
    "dynamic_config" : 1,
-   "generated_by" : "Module::Build version 0.38, CPAN::Meta::Converter version 2.112621",
+   "generated_by" : "Module::Build version 0.38, CPAN::Meta::Converter version 2.120921",
    "license" : [
       "perl_5"
    ],
@@ -16,7 +16,7 @@
    "prereqs" : {
       "build" : {
          "requires" : {
-            "Test::More" : 0
+            "Test::More" : "0"
          }
       },
       "configure" : {
@@ -26,21 +26,21 @@
       },
       "runtime" : {
          "requires" : {
-            "Carp" : 0,
-            "Config" : 0,
-            "Cwd" : 0,
-            "IO::Handle" : 0,
-            "IPC::Open3" : 0,
-            "List::Util" : 0,
-            "POSIX" : 0,
-            "Symbol" : 0
+            "Carp" : "0",
+            "Config" : "0",
+            "Cwd" : "0",
+            "IO::Handle" : "0",
+            "IPC::Open3" : "0",
+            "List::Util" : "0",
+            "POSIX" : "0",
+            "Symbol" : "0"
          }
       }
    },
    "provides" : {
       "System::Command" : {
          "file" : "lib/System/Command.pm",
-         "version" : "1.09"
+         "version" : "1.100"
       }
    },
    "release_status" : "stable",
@@ -52,5 +52,5 @@
          "url" : "http://github.com/book/System-Command"
       }
    },
-   "version" : "1.09"
+   "version" : "1.100"
 }
