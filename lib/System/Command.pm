@@ -19,7 +19,7 @@ use constant STATUS  => qw( exit signal core );
 use constant MSWin32 => $^O eq 'MSWin32';
 require IPC::Run if MSWin32;
 
-our $VERSION = '1.100';
+our $VERSION = '1.101';
 
 our $QUIET = 0;
 
@@ -139,7 +139,7 @@ sub new {
         stdin    => $in,
         stdout   => $out,
         stderr   => $err,
-        _ipc_run => $pid,
+      ( _ipc_run => $pid )x!! MSWin32,
     }, $class;
 
     return $self;
@@ -272,6 +272,9 @@ The I<current working directory> in which the command will be run.
 =item C<env>
 
 A hashref containing key / values to add to the command environment.
+
+If several option hashes define the C<env> key, the hashes they point
+to will be merged into one (instead of the last one taking precedence).
 
 If a value is C<undef>, the variable corresponding to the key will
 be I<removed> from the environment.
