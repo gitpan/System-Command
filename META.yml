@@ -16,7 +16,7 @@ name: System-Command
 provides:
   System::Command:
     file: lib/System/Command.pm
-    version: 1.101
+    version: 1.102
 requires:
   Carp: 0
   Config: 0
@@ -29,4 +29,4 @@ requires:
 resources:
   license: http://dev.perl.org/licenses/
   repository: http://github.com/book/System-Command
-version: 1.101
+version: 1.102
