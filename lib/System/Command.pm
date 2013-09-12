@@ -1,4 +1,7 @@
 package System::Command;
+{
+  $System::Command::VERSION = '1.104';
+}
 
 use warnings;
 use strict;
@@ -11,15 +14,13 @@ use Symbol ();
 use List::Util qw( reduce );
 
 use Config;
-use Fcntl ();
+use Fcntl qw( F_GETFD F_SETFD FD_CLOEXEC );
 use POSIX ":sys_wait_h";
 use constant STATUS  => qw( exit signal core );
 
 # MSWin32 support
 use constant MSWin32 => $^O eq 'MSWin32';
 require IPC::Run if MSWin32;
-
-our $VERSION = '1.103';
 
 our $QUIET = 0;
 
@@ -116,9 +117,9 @@ my $_spawn = sub {
                 close $err;
 
                 # close $stat_w on exec
-                my $flags = fcntl( $stat_w, Fcntl::F_GETFD, 0 )
+                my $flags = fcntl( $stat_w, F_GETFD, 0 )
                     or croak "fcntl GETFD failed: $!";
-                fcntl( $stat_w, Fcntl::F_SETFD, $flags | Fcntl::FD_CLOEXEC )
+                fcntl( $stat_w, F_SETFD, $flags | FD_CLOEXEC )
                     or croak "fcntl SETFD failed: $!";
 
                 # associate STDIN, STDOUT and STDERR to the pipes
@@ -277,11 +278,17 @@ sub close {
 
 1;
 
-__END__
+
+
+=pod
 
 =head1 NAME
 
 System::Command - Object for running system commands
+
+=head1 VERSION
+
+version 1.104
 
 =head1 SYNOPSIS
 
@@ -294,9 +301,9 @@ System::Command - Object for running system commands
     $cmd = System::Command->new( @cmd, \%option );
 
     # $cmd is basically a hash, with keys / accessors
-    $cmd->stdin();     # filehandle to the process' stdin (write)
-    $cmd->stdout();    # filehandle to the process' stdout (read)
-    $cmd->stderr();    # filehandle to the process' stdout (read)
+    $cmd->stdin();     # filehandle to the process stdin (write)
+    $cmd->stdout();    # filehandle to the process stdout (read)
+    $cmd->stderr();    # filehandle to the process stdout (read)
     $cmd->pid();       # pid of the child process
 
     # find out if the child process died
@@ -376,7 +383,6 @@ an exception.
 The C<System::Command> object returned by C<new()> has a number of
 attributes defined (see below).
 
-
 =head2 close()
 
 Close all pipes to the child process, collects exit status, etc.
@@ -390,13 +396,11 @@ If the process was indeed terminated, collects exit status, etc.
 and defines the same attributes as C<close()>, but does B<not> close
 all pipes to the child process,
 
-
 =head2 spawn( @cmd )
 
 This shortcut method calls C<new()> (and so accepts options in the same
 manner) and directly returns the C<pid>, C<stdin>, C<stdout> and C<stderr>
 attributes, in that order.
-
 
 =head2 Accessors
 
@@ -440,7 +444,6 @@ Regarding the handles to the child process, note that in the following code:
 C<$fh> is opened and points to the output handle of the child process,
 while the anonymous C<System::Command> object has been destroyed. Once
 C<$fh> is destroyed, the subprocess will be reaped, thus avoiding zombies.
-
 
 After the call to C<close()> or after C<is_terminated()> returns true,
 the following attributes will be defined:
@@ -520,7 +523,6 @@ You can find documentation for this module with the perldoc command.
 
     perldoc System::Command
 
-
 You can also look for information at:
 
 =over 4
@@ -543,7 +545,6 @@ L<http://search.cpan.org/dist/System-Command/>
 
 =back
 
-
 =head1 COPYRIGHT
 
 Copyright 2010-2013 Philippe Bruhat (BooK).
@@ -557,4 +558,10 @@ by the Free Software Foundation; or the Artistic License.
 See L<http://dev.perl.org/licenses/> for more information.
 
 =cut
+
+
+__END__
+
+# ABSTRACT: Object for running system commands
+
 
