@@ -1,6 +1,6 @@
 package System::Command;
 {
-  $System::Command::VERSION = '1.104';
+  $System::Command::VERSION = '1.105';
 }
 
 use warnings;
@@ -288,7 +288,7 @@ System::Command - Object for running system commands
 
 =head1 VERSION
 
-version 1.104
+version 1.105
 
 =head1 SYNOPSIS
 
