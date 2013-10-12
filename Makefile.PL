@@ -34,12 +34,13 @@ my %WriteMakefileArgs = (
     "IPC::Run" => 0,
     "List::Util" => 0,
     "POSIX" => 0,
+    "Scalar::Util" => 0,
     "Symbol" => 0,
     "constant" => 0,
     "strict" => 0,
     "warnings" => 0
   },
-  "VERSION" => "1.105",
+  "VERSION" => "1.106",
   "test" => {
     "TESTS" => "t/*.t"
   }

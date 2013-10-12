@@ -61,6 +61,7 @@ eval { $v .= pmver('IO::Handle','any version') };
 eval { $v .= pmver('IPC::Run','any version') };
 eval { $v .= pmver('List::Util','any version') };
 eval { $v .= pmver('POSIX','any version') };
+eval { $v .= pmver('Scalar::Util','any version') };
 eval { $v .= pmver('Symbol','any version') };
 eval { $v .= pmver('Test::More','0.88') };
 eval { $v .= pmver('constant','any version') };
