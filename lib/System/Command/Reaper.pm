@@ -1,6 +1,6 @@
 package System::Command::Reaper;
 {
-  $System::Command::Reaper::VERSION = '1.106';
+  $System::Command::Reaper::VERSION = '1.107';
 }
 
 use strict;
@@ -37,7 +37,7 @@ sub is_terminated {
     my $pid = $self->{pid};
 
     # Zed's dead, baby. Zed's dead.
-    return $pid if !$_is_alive->($pid) and exists $self->{command}{exit};
+    return $pid if !$_is_alive->($pid) and exists $self->{exit};
 
     # If that is a re-animated body, we're gonna have to kill it.
     return $self->_reap(WNOHANG);
@@ -47,19 +47,19 @@ sub _reap {
     my ( $self, @flags ) = @_;
     my $pid = $self->{pid};
 
-    if ( my $reaped = waitpid( $pid, @flags )
-        and !exists $self->{command}{exit} )
-    {
+    # REPENT/THE END IS/EXTREMELY/FUCKING/NIGH
+    if ( my $reaped = waitpid( $pid, @flags ) and !exists $self->{exit} ) {
         my $zed = $reaped == $pid;
         carp "Child process already reaped, check for a SIGCHLD handler"
-            if !$zed && !$System::Command::QUIET;
+            if !$zed && !$System::Command::QUIET && !MSWin32;
 
+        # What do you think? "Zombie Kill of the Week"?
         @{$self}{ STATUS() }
             = $zed
             ? ( $? >> 8, $? & 127, $? & 128 )
             : ( -1, -1, -1 );
 
-        # does our creator still exist?
+        # Who died and made you fucking king of the zombies?
         @{ $self->{command} }{ STATUS() } = @{$self}{ STATUS() }
             if defined $self->{command};
 
@@ -98,11 +98,11 @@ sub DESTROY {
 
 =head1 NAME
 
-System::Command::Reaper
+System::Command::Reaper - Reap processes started by System::Command
 
 =head1 VERSION
 
-version 1.106
+version 1.107
 
 =head1 SYNOPSIS
 
@@ -143,10 +143,6 @@ The System::Command::Reaper object acts as a sentinel, that takes
 care of reaping the child process when the original L<System::Command>
 and its filehandles have been destroyed (or when L<System::Command>
 C<close()> method is being called).
-
-=head1 NAME
-
-System::Command::Reaper - Reap processes started by System::Command
 
 =head1 METHODS
 
@@ -194,4 +190,6 @@ under the same terms as Perl itself.
 
 
 __END__
+
+# ABSTRACT: Reap processes started by System::Command
 
