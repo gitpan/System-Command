@@ -1,8 +1,5 @@
 package System::Command;
-{
-  $System::Command::VERSION = '1.107';
-}
-
+$System::Command::VERSION = '1.108';
 use warnings;
 use strict;
 use 5.006;
@@ -11,6 +8,7 @@ use Carp;
 use Cwd qw( cwd );
 use IO::Handle;
 use Symbol ();
+use Scalar::Util qw( blessed );
 use List::Util qw( reduce );
 use System::Command::Reaper;
 
@@ -22,6 +20,17 @@ use constant MSWin32 => $^O eq 'MSWin32';
 require IPC::Run if MSWin32;
 
 our $QUIET = 0;
+
+# trace setup at startup
+my $_trace_opts = sub {
+    my ( $trace, $file, $th ) = split /=/, shift, 2;
+    open $th, '>>', $file or carp "Can't open $file: $!" if $file;
+    $th ||= *STDERR;
+    return ( $trace, $th );
+};
+my @trace;
+@trace = $_trace_opts->( $ENV{SYSTEM_COMMAND_TRACE} )
+    if $ENV{SYSTEM_COMMAND_TRACE};
 
 sub import {
     my ( $class, @args ) = @_;
@@ -152,6 +161,32 @@ my $_spawn = sub {
     return ( $pid, $in, $out, $err );
 };
 
+my $_dump_ref = sub {
+    require Data::Dumper;    # only load if needed
+    local $Data::Dumper::Indent    = 0;
+    local $Data::Dumper::Purity    = 0;
+    local $Data::Dumper::Maxdepth  = 0;
+    local $Data::Dumper::Quotekeys = 0;
+    local $Data::Dumper::Sortkeys  = 1;
+    local $Data::Dumper::Useqq     = 1;
+    local $Data::Dumper::Terse     = 1;
+    return Data::Dumper->Dump( [shift] );
+};
+
+my $_do_trace = sub {
+    my ( $trace, $th, $pid, $cmd, $o ) = @_;
+    print $th "System::Command cmd[$pid]: ",
+        join( ' ', map /\s/ ? $_dump_ref->($_) : $_, @$cmd ), "\n";
+    print $th map "System::Command opt[$pid]: $_->[0] => $_->[1]\n",
+        map [ $_ => $_dump_ref->( $o->{$_} ) ],
+        grep { $_ ne 'env' } sort keys %$o
+        if $trace > 1;
+    print $th map "System::Command env[$pid]: $_->[0] => $_->[1]\n",
+        map [ $_ => $_dump_ref->( $o->{env}{$_} ) ],
+        keys %{ $o->{env} || {} }
+        if $trace > 2;
+};
+
 # module methods
 sub new {
     my ( $class, @cmd ) = @_;
@@ -169,6 +204,11 @@ sub new {
         };
     }
     @o;
+
+    # open the trace file before changing directory
+    my ( $trace, $th );
+    ( $trace, $th ) = $_trace_opts->( $o->{trace} ) if $o->{trace};
+    ( $trace, $th ) = @trace if @trace;    # environment override
 
     # chdir to the expected directory
     my $orig = cwd;
@@ -191,7 +231,13 @@ sub new {
     my ( $pid, $in, $out, $err ) = eval { $_spawn->(@cmd); };
 
     # FIXME - better check error conditions
-    croak $@ if !defined $pid;
+    if ( !defined $pid ) {
+        $_do_trace->( $trace, $th, '!', \@cmd, $o ) if $trace;
+        croak $@;
+    }
+
+    # trace is mostly a debugging tool
+    $_do_trace->( $trace, $th, $pid, \@cmd, $o ) if $trace;
 
     # some input was provided
     if ( defined $o->{input} ) {
@@ -246,7 +292,7 @@ System::Command - Object for running system commands
 
 =head1 VERSION
 
-version 1.107
+version 1.108
 
 =head1 SYNOPSIS
 
@@ -283,15 +329,17 @@ version 1.107
 
 =head1 DESCRIPTION
 
-C<System::Command> is a class that launches external system commands
+System::Command is a class that launches external system commands
 and return an object representing them, allowing to interact with them
 through their C<STDIN>, C<STDOUT> and C<STDERR> handles.
 
 =head1 METHODS
 
-C<System::Command> supports the following methods:
+System::Command supports the following methods:
 
-=head2 new( @cmd )
+=head2 new
+
+    my $cmd = System::Command->new( @cmd )
 
 Runs an external command using the list in C<@cmd>.
 
@@ -336,17 +384,60 @@ On some systems, some commands may close standard input on startup,
 which will cause a SIGPIPE when trying to write to it. This will raise
 an exception.
 
+=item C<trace>
+
+The C<trace> option defines the trace settings for System::Command.
+The C<SYSTEM_COMMAND_TRACE> environment variable can be used to specify
+a global trace setting at startup. The environment variable overrides
+individual C<trace> options.
+
+If C<trace> or C<SYSTEM_COMMAND_TRACE> contains an C<=> character then
+what follows it is used as the name of the file to append the trace to.
+When using the C<trace> option, it is recommended to use an absolute
+path for the trace file, in case the main program C<chdir()> before
+calling System::Command.
+
+At trace level 1, only the command line is shown:
+
+    System::Command cmd[12834]: /usr/bin/git commit -m "Test option hash in new()"
+
+Note: Command-line parameters containing whitespace will be properly quoted.
+
+At trace level 2, the options values are shown:
+
+    System::Command opt[12834]: cwd => "/tmp/kHkPUBIVWd"
+    System::Command opt[12834]: fatal => {128 => 1,129 => 1}
+    System::Command opt[12834]: git => "/usr/bin/git"
+
+Note: The C<fatal> and C<git> options in the example above is actually
+used by L<Git::Repository> to determine the command to be run, and
+ignored by System::Command. References are dumped using L<Data::Dumper>.
+
+At trace level 3, the content of the C<env> option is also listed:
+
+    System::Command env[12834]: GIT_AUTHOR_EMAIL => "author\@example.com"
+    System::Command env[12834]: GIT_AUTHOR_NAME => "Example author"
+
+If the command cannot be spawned, the trace will show C<!> instead of
+the pid:
+
+    System::Command: ! - does-not-exist
+
 =back
 
-The C<System::Command> object returned by C<new()> has a number of
+The System::Command object returned by C<new()> has a number of
 attributes defined (see below).
 
-=head2 close()
+=head2 close
+
+    $cmd->close;
 
 Close all pipes to the child process, collects exit status, etc.
 and defines a number of attributes (see below).
 
-=head2 is_terminated()
+=head2 is_terminated
+
+    if ( $cmd->is_terminated ) {...}
 
 Returns a true value if the underlying process was terminated.
 
@@ -354,7 +445,9 @@ If the process was indeed terminated, collects exit status, etc.
 and defines the same attributes as C<close()>, but does B<not> close
 all pipes to the child process.
 
-=head2 spawn( @cmd )
+=head2 spawn
+
+    my ( $pid, $in, $out, $err ) = System::Command->spawn(@cmd);
 
 This shortcut method calls C<new()> (and so accepts options in the same
 manner) and directly returns the C<pid>, C<stdin>, C<stdout> and C<stderr>
@@ -362,7 +455,7 @@ attributes, in that order.
 
 =head2 Accessors
 
-The attributes of a C<System::Command> object are also accessible
+The attributes of a System::Command object are also accessible
 through a number of accessors.
 
 The object returned by C<new()> will have the following attributes defined:
@@ -400,8 +493,9 @@ Regarding the handles to the child process, note that in the following code:
     my $fh = System::Command->new( @cmd )->stdout;
 
 C<$fh> is opened and points to the output handle of the child process,
-while the anonymous C<System::Command> object has been destroyed. Once
+while the anonymous System::Command object has been destroyed. Once
 C<$fh> is destroyed, the subprocess will be reaped, thus avoiding zombies.
+(L<System::Command::Reaper> undertakes this process.)
 
 After the call to C<close()> or after C<is_terminated()> returns true,
 the following attributes will be defined:
@@ -424,19 +518,19 @@ The signal, if any, that killed the command.
 
 =head1 CAVEAT EMPTOR
 
-Note that C<System::Command> uses C<waitpid()> to catch the status
+Note that System::Command uses C<waitpid()> to catch the status
 information of the child processes it starts. This means that if your
 code (or any module you C<use>) does something like the following:
 
     local $SIG{CHLD} = 'IGNORE';    # reap child processes
 
-C<System::Command> will not be able to capture the C<exit>, C<core>
+System::Command will not be able to capture the C<exit>, C<core>
 and C<signal> attributes. It will instead set all of them to the
 impossible value C<-1>, and display the warning
 C<Child process already reaped, check for a SIGCHLD handler>.
 
 To silence this warning (and accept the impossible status information),
-load C<System::Command> with:
+load System::Command with:
 
     use System::Command -quiet;
 
@@ -444,7 +538,7 @@ It is also possible to more finely control the warning by setting
 the C<$System::Command::QUIET> variable (the warning is not emitted
 if the variable is set to a true value).
 
-If the subprocess started by C<System::Command> has a short life
+If the subprocess started by System::Command has a short life
 expectancy, and no other child process is expected to die during that
 time, you could even disable the handler locally (use at your own risks):
 
@@ -461,9 +555,9 @@ Philippe Bruhat (BooK), C<< <book at cpan.org> >>
 =head1 ACKNOWLEDGEMENTS
 
 Thanks to Alexis Sukrieh (SUKRIA) who, when he saw the description of
-C<Git::Repository::Command> during my talk at OSDC.fr 2010, asked
+L<Git::Repository::Command> during my talk at OSDC.fr 2010, asked
 why it was not an independent module. This module was started by
-taking out of C<Git::Repository::Command> 1.08 the parts that
+taking out of L<Git::Repository::Command> 1.08 the parts that
 weren't related to Git.
 
 Thanks to Christian Walde (MITHALDU) for his help in making this
