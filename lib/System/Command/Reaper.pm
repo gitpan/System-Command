@@ -1,5 +1,5 @@
 package System::Command::Reaper;
-$System::Command::Reaper::VERSION = '1.108';
+$System::Command::Reaper::VERSION = '1.109';
 use strict;
 use warnings;
 use 5.006;
@@ -41,11 +41,14 @@ sub is_terminated {
 }
 
 sub _reap {
-    my ( $self, @flags ) = @_;
+    my ( $self, $flags ) = @_;
+
+    $flags = 0 if ! defined $flags;
+
     my $pid = $self->{pid};
 
     # REPENT/THE END IS/EXTREMELY/FUCKING/NIGH
-    if ( my $reaped = waitpid( $pid, @flags ) and !exists $self->{exit} ) {
+    if ( my $reaped = waitpid( $pid, $flags ) and !exists $self->{exit} ) {
         my $zed = $reaped == $pid;
         carp "Child process already reaped, check for a SIGCHLD handler"
             if !$zed && !$System::Command::QUIET && !MSWin32;
@@ -99,7 +102,7 @@ System::Command::Reaper - Reap processes started by System::Command
 
 =head1 VERSION
 
-version 1.108
+version 1.109
 
 =head1 SYNOPSIS
 
