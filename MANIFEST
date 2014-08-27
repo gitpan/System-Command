@@ -2,12 +2,15 @@
 Changes
 LICENSE
 MANIFEST
+META.json
 META.yml
 Makefile.PL
 README
 dist.ini
 lib/System/Command.pm
 lib/System/Command/Reaper.pm
+pod2htmd.tmp
+pod2htmi.tmp
 t/00-load.t
 t/000-report-versions-tiny.t
 t/01-load.t

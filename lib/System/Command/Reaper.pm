@@ -1,5 +1,5 @@
 package System::Command::Reaper;
-$System::Command::Reaper::VERSION = '1.109';
+$System::Command::Reaper::VERSION = '1.110';
 use strict;
 use warnings;
 use 5.006;
@@ -102,7 +102,7 @@ System::Command::Reaper - Reap processes started by System::Command
 
 =head1 VERSION
 
-version 1.109
+version 1.110
 
 =head1 SYNOPSIS
 

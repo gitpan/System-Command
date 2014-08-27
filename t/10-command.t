@@ -78,6 +78,9 @@ my @tests = (
             input => ''
             }
     },
+    {   cmdline => [ $^X, $name, { env => { 'TO_BE_DELETED' => '' } } ],
+        options => { env => { 'TO_BE_DELETED' => '' } }
+    },
 );
 my @fail = (
     {   cmdline =>
@@ -120,6 +123,9 @@ for my $t ( @tests, @fail ) {
         }
     }
 
+    # default option: setpgrp
+    $t->{options}{setpgrp} = 1
+        if !exists $t->{options}{setpgrp};
     is_deeply( [ $cmd->cmdline ],
         [ grep { !ref } @{ $t->{cmdline} } ], 'cmdline' );
     is_deeply( $cmd->options, $t->{options}, 'options' );
@@ -133,6 +139,7 @@ for my $t ( @tests, @fail ) {
     delete $env->{$_}
         for grep { !defined $t->{options}{env}{$_} }
         keys %{ $t->{options}{env} || {} };
+    delete $env->{$_} for grep /^CONEMU/, keys %ENV;
     my $info;
     eval $output;
     my $w32env = {};
